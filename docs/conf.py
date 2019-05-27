@@ -12,6 +12,7 @@
 # All configuration values have a default; values that are commented out
 # serve to show the default.
 
+from datetime import datetime
 import sys
 import os
 
@@ -31,7 +32,6 @@ import os
 extensions = [
     'sphinx.ext.todo',
     'sphinx.ext.coverage',
-    'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
 ]
 
@@ -50,8 +50,9 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'python-cheatsheet'
-copyright = u'2016, crazyguitar'
+year = datetime.now().year
+project = u'pysheeet'
+copyright = u'2016-{}, crazyguitar'.format(year)
 author = u'crazyguitar'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -118,13 +119,15 @@ html_theme = 'alabaster'
 # further.  For a list of options available for each theme, see the
 # documentation.
 html_theme_options = {
+    'logo': 'logo.svg',
     'show_powered_by': False,
     'github_user': 'crazyguitar',
     'github_repo': 'pysheeet',
     'github_banner': True,
+    'github_type': 'star',
     'show_related': False,
-    'head_font_family': 'Georgia',
-    'font_family': 'Georgia'
+    'body_max_width': 'none',
+    'body_min_width': 'none',
 }
 
 # Add any paths that contain custom themes here, relative to this directory.
@@ -133,6 +136,13 @@ html_theme_options = {
 # The name for this set of Sphinx documents.  If None, it defaults to
 # "<project> v<release> documentation".
 html_title = "pysheeet"
+html_context = {
+    "tracking_id": os.environ.get("TRACKING_ID"),
+    "carbonad_serve": os.environ.get("CARBONAD_SERVE"),
+    "carbonad_placement": os.environ.get("CARBONAD_PLACEMENT")
+}
+
+has_carbonad = os.environ.get("CARBONAD_SERVE") and os.environ.get("CARBONAD_PLACEMENT")
 
 # A shorter title for the navigation bar.  Default is the same as html_title.
 #html_short_title = None
@@ -144,17 +154,21 @@ html_title = "pysheeet"
 # The name of an image file (within the static path) to use as favicon of the
 # docs.  This file should be a Windows icon file (.ico) being 16x16 or 32x32
 # pixels large.
-#html_favicon = None
+html_favicon = '_static/favicon.ico'
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
 
+html_css_files = ['style.css']
+if has_carbonad:
+    html_css_files.append('carbonad.css')
+
 # Add any extra paths that contain custom files (such as robots.txt or
 # .htaccess) here, relative to this directory. These files are copied
 # directly to the root of the documentation.
-#html_extra_path = []
+html_extra_path = ['_extra']
 
 # If not '', a 'Last updated on:' timestamp is inserted at every page bottom,
 # using the given strftime format.
@@ -165,23 +179,26 @@ html_static_path = ['_static']
 #html_use_smartypants = True
 
 # Custom sidebar templates, maps document names to template names.
-html_sidebars = {
-    'index': [
-        'sidebarintro.html',
-        'link.html',
-        'relations.html',
-        'github.html',
-        'searchbox.html'
-    ],
-    '**': [
-        'sidebarintro.html',
-        'link.html',
-        'github.html',
-        'localtoc.html',
-        'relations.html',
-        'searchbox.html'
-    ]
-}
+sidebar_index = [
+    'about.html',
+    'sidebarintro.html',
+    'link.html',
+]
+sidebar_notes = [
+    'about.html',
+    'sidebarintro.html',
+    'link.html',
+]
+
+if has_carbonad:
+    sidebar_index.append('carbonad.html')
+    sidebar_notes.append('carbonad.html')
+
+sidebar_index.append('searchbox.html')
+sidebar_notes.append('localtoc.html')
+sidebar_notes.append('searchbox.html')
+html_sidebars = {'index': sidebar_index, '**': sidebar_notes}
+
 
 # Additional templates that should be rendered to pages, maps page names to
 # template names.
@@ -310,3 +327,47 @@ texinfo_documents = [
 
 # If true, do not generate a @detailmenu in the "Top" node's menu.
 #texinfo_no_detailmenu = False
+
+def add_html_link(app, pagename, templatename, context, doctree):
+    """Append html page."""
+    if pagename in ['404', 'search', 'genindex']:
+        return
+    app.sitemaps.append(pagename + ".html")
+
+
+def create_sitemap(app, exception):
+    """Generate a sitemap.xml"""
+    from xml.etree.ElementTree import ElementTree, Element, SubElement
+    from datetime import datetime
+
+    r = Element("urlset")
+    r.set("xmlns", "http://www.sitemaps.org/schemas/sitemap/0.9")
+    r.set("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance")
+    r.set("xsi:schemaLocation", "http://www.sitemaps.org/schemas/sitemap/0.9" +
+        " http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd")
+
+    for link in app.sitemaps:
+        url = SubElement(r, "url")
+        now = datetime.now()
+        SubElement(url, "loc").text = app.pysheeet + link
+        SubElement(url, "lastmod").text = now.date().isoformat()
+
+    f = app.outdir + "/sitemap.xml"
+    t = ElementTree(r)
+    t.write(f, xml_declaration=True, encoding='utf-8', method="xml")
+
+
+def setup(app):
+    """Customize setup."""
+    site = os.environ.get("PYSHEEET")
+    if not site:
+        return
+
+    if site[-1] != '/':
+        site += '/'
+
+    # create a sitemap
+    app.pysheeet = site
+    app.sitemaps = []
+    app.connect('html-page-context', add_html_link)
+    app.connect('build-finished', create_sitemap)

@@ -1,6 +1,10 @@
-=========================
-New in Python3 cheatsheet
-=========================
+.. meta::
+    :description lang=en: Collect useful snippets of new features in Python3
+    :keywords: Python, Python3, New in Python3
+
+==============
+New in Python3
+==============
 
 
 .. contents:: Table of Contents
@@ -82,6 +86,102 @@ Python 3
     >>> len([_c for _c in 'Café'])
     4
 
+
+Division Operator
+------------------
+
+**New in Python 3.0**
+
+- PEP 238_ - Changing the Division Operator
+
+Python2
+
+.. code-block:: python
+
+    >>> 1 / 2
+    0
+    >>> 1 // 2
+    0
+    >>> 1. / 2
+    0.5
+
+    # back port "true division" to python2
+
+    >>> from __future__ import division
+    >>> 1 / 2
+    0.5
+    >>> 1 // 2
+    0
+
+Python3
+
+.. code-block:: python
+
+    >>> 1 / 2
+    0.5
+    >>> 1 // 2
+    0
+
+New dict implementation
+------------------------
+
+**New in Python 3.6**
+
+- PEP 468_ - Preserving the order of \*\*kwargs in a function
+- PEP 520_ - Preserving Class Attribute Definition Order
+- bpo 27350_ - More compact dictionaries with faster iteration
+
+Before Python 3.5
+
+.. code-block:: python
+
+    >>> import sys
+    >>> sys.getsizeof({str(i):i for i in range(1000)})
+    49248
+
+    >>> d = {'timmy': 'red', 'barry': 'green', 'guido': 'blue'}
+    >>> d   # without order-preserving
+    {'barry': 'green', 'timmy': 'red', 'guido': 'blue'}
+
+Python 3.6
+
+- Memory usage is smaller than Python 3.5
+- Preserve insertion ordered
+
+.. code-block:: python
+
+    >>> import sys
+    >>> sys.getsizeof({str(i):i for i in range(1000)})
+    36968
+
+    >>> d = {'timmy': 'red', 'barry': 'green', 'guido': 'blue'}
+    >>> d   # preserve insertion ordered
+    {'timmy': 'red', 'barry': 'green', 'guido': 'blue'}
+
+Keyword-Only Arguments
+-----------------------
+
+**New in Python 3.0**
+
+- PEP 3102_ - Keyword-Only Arguments
+
+.. code-block:: python
+
+    >>> def f(a, b, *, kw):
+    ...     print(a, b, kw)
+    ...
+    >>> f(1, 2, 3)
+    Traceback (most recent call last):
+      File "<stdin>", line 1, in <module>
+    TypeError: f() takes 2 positional arguments but 3 were given
+    >>> f(1, 2)
+    Traceback (most recent call last):
+      File "<stdin>", line 1, in <module>
+    TypeError: f() missing 1 required keyword-only argument: 'kw'
+    >>> f(1, 2, kw=3)
+    1 2 3
+
+
 New Super
 ----------
 
@@ -153,7 +253,26 @@ Python 3
 
 .. code-block:: python
 
+    >>> a = "Python3"
     >>> a != "Python2"
+    True
+
+BDFL retirement
+---------------
+
+**New in Python 3.1**
+
+- PEP 401_ - BDFL Retirement
+
+.. code-block:: python
+
+    >>> from __future__ import barry_as_FLUFL
+    >>> 1 != 2
+      File "<stdin>", line 1
+        1 != 2
+           ^
+    SyntaxError: with Barry as BDFL, use '<>' instead of '!='
+    >>> 1 <> 2
     True
 
 Not allow ``from module import *`` inside function
@@ -259,6 +378,8 @@ Function annotations
 **New in Python 3.0**
 
 - PEP 3107_ - Function Annotations
+- PEP 484_ - Type Hints
+- PEP 483_ - The Theory of Type Hints
 
 .. code-block:: python
 
@@ -656,6 +777,8 @@ Data Classes
 
 PEP 557_ - Data Classes
 
+Mutable Data Class
+
 .. code-block:: python
 
     >>> from dataclasses import dataclass
@@ -672,7 +795,9 @@ PEP 557_ - Data Classes
     DCls(x='foo', y='baz')
     >>> d.z = "bar"
 
-    # immutable
+Immutable Data Class
+
+.. code-block:: python
 
     >>> from dataclasses import dataclass
     >>> from dataclasses import FrozenInstanceError
@@ -723,11 +848,17 @@ Built-in ``breakpoint()``
 .. _3138: https://www.python.org/dev/peps/pep-3138/
 .. _3120: https://www.python.org/dev/peps/pep-3120/
 .. _3131: https://www.python.org/dev/peps/pep-3131/
+.. _238: https://www.python.org/dev/peps/pep-0238/
+.. _3102: https://www.python.org/dev/peps/pep-3102/
 .. _3135: https://www.python.org/dev/peps/pep-3135/
 .. _3104: https://www.python.org/dev/peps/pep-3104/
 .. _3132: https://www.python.org/dev/peps/pep-3132/
 .. _448: https://www.python.org/dev/peps/pep-0448/
 .. _3107: https://www.python.org/dev/peps/pep-3107/
+.. _468: https://www.python.org/dev/peps/pep-0468/
+.. _484: https://www.python.org/dev/peps/pep-0484/
+.. _483: https://www.python.org/dev/peps/pep-0483/
+.. _520: https://www.python.org/dev/peps/pep-0520/
 .. _526: https://www.python.org/dev/peps/pep-0526/
 .. _461: https://www.python.org/dev/peps/pep-0461/
 .. _498: https://www.python.org/dev/peps/pep-0498/
@@ -740,3 +871,5 @@ Built-in ``breakpoint()``
 .. _557: https://www.python.org/dev/peps/pep-0557/
 .. _553: https://www.python.org/dev/peps/pep-0553/
 .. _560: https://www.python.org/dev/peps/pep-0560/
+.. _27350: https://bugs.python.org/issue27350
+.. _401: https://www.python.org/dev/peps/pep-0401/

@@ -1,10 +1,20 @@
-========================
-Python socket cheatsheet
-========================
+.. meta::
+    :description lang=en: Collect useful snippets of Python socket
+    :keywords: Python, Python3, Python Socket, Python Socket Cheat Sheet
+
+======
+Socket
+======
+
+Socket programming is inevitable for most programmers even though Python
+provides much high-level networking interface such as httplib, urllib, imaplib,
+telnetlib and so on. Some Unix-Like system’s interfaces were called through
+socket interface, e.g., Netlink, Kernel cryptography. To temper a pain to read
+long-winded documents or source code, this cheat sheet tries to collect some
+common or uncommon snippets which are related to low-level socket programming.
 
 .. contents:: Table of Contents
     :backlinks: none
-
 
 Get Hostname
 ------------
@@ -19,6 +29,53 @@ Get Hostname
     '172.20.10.4'
     >>> socket.gethostbyname('localhost')
     '127.0.0.1'
+
+Get address family and socket address from string
+-------------------------------------------------
+
+.. code-block:: python
+
+    import socket
+    import sys
+
+
+    try:
+        for res in socket.getaddrinfo(sys.argv[1], None,
+                                      proto=socket.IPPROTO_TCP):
+            family = res[0]
+            sockaddr = res[4]
+            print(family, sockaddr)
+    except socket.gaierror:
+        print("Invalid")
+
+Output:
+
+.. code-block:: console
+
+    $ gai.py 192.0.2.244
+    AddressFamily.AF_INET ('192.0.2.244', 0)
+    $ gai.py 2001:db8:f00d::1:d
+    AddressFamily.AF_INET6 ('2001:db8:f00d::1:d', 0, 0, 0)
+    $ gai.py www.google.com
+    AddressFamily.AF_INET6 ('2607:f8b0:4006:818::2004', 0, 0, 0)
+    AddressFamily.AF_INET ('172.217.10.132', 0)
+
+It handles unusual cases, valid and invalid:
+
+.. code-block:: console
+
+    $ gai.py 10.0.0.256  # octet overflow
+    Invalid
+    $ gai.py not-exist.example.com  # unresolvable
+    Invalid
+    $ gai.py fe80::1%eth0  # scoped
+    AddressFamily.AF_INET6 ('fe80::1%eth0', 0, 0, 2)
+    $ gai.py ::ffff:192.0.2.128  # IPv4-Mapped
+    AddressFamily.AF_INET6 ('::ffff:192.0.2.128', 0, 0, 0)
+    $ gai.py 0xc000027b  # IPv4 in hex
+    AddressFamily.AF_INET ('192.0.2.123', 0)
+    $ gai.py 3221226198  # IPv4 in decimal
+    AddressFamily.AF_INET ('192.0.2.214', 0)
 
 Transform Host & Network Endian
 --------------------------------

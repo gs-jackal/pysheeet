@@ -1,6 +1,6 @@
-======================
-Python test cheatsheet
-======================
+====
+Test
+====
 
 .. contents:: Table of Contents
     :backlinks: none

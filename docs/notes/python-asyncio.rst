@@ -1,276 +1,30 @@
-Python asyncio cheatsheet
-=========================
+.. meta::
+    :description lang=en: Collect useful snippets of asyncio
+    :keywords: Python, Python3, Asyncio, Asyncio Cheat Sheet
+
+=======
+Asyncio
+=======
 
 .. contents:: Table of Contents
     :backlinks: none
 
+asyncio.run
+------------
 
-What is @asyncio.coroutine?
----------------------------
-
-.. code-block:: python
-
-    import asyncio
-    import inspect
-    from functools import wraps
-
-    Future = asyncio.futures.Future
-    def coroutine(func):
-        """Simple prototype of coroutine"""
-        @wraps(func)
-        def coro(*a, **k):
-            res = func(*a, **k)
-            if isinstance(res, Future) or inspect.isgenerator(res):
-                res = yield from res
-            return res
-        return coro
-
-    @coroutine
-    def foo():
-        yield from asyncio.sleep(1)
-        print("Hello Foo")
-
-    @asyncio.coroutine
-    def bar():
-        print("Hello Bar")
-
-    loop = asyncio.get_event_loop()
-    tasks = [loop.create_task(foo()),
-             loop.create_task(bar())]
-    loop.run_until_complete(
-         asyncio.wait(tasks))
-    loop.close()
-
-output:
-
-.. code-block:: console
-
-    $ python test.py
-    Hello Bar
-    Hello Foo
-
-
-What is a Task?
----------------
+**New in Python 3.7**
 
 .. code-block:: python
 
-    # goal: supervise coroutine run state
-    # ref: asyncio/tasks.py
-
-    import asyncio
-    Future = asyncio.futures.Future
-
-    class Task(Future):
-        """Simple prototype of Task"""
-
-        def __init__(self, gen, *,loop):
-            super().__init__(loop=loop)
-            self._gen = gen
-            self._loop.call_soon(self._step)
-
-        def _step(self, val=None, exc=None):
-            try:
-                if exc:
-                    f = self._gen.throw(exc)
-                else:
-                    f = self._gen.send(val)
-            except StopIteration as e:
-                self.set_result(e.value)
-            except Exception as e:
-                self.set_exception(e)
-            else:
-                f.add_done_callback(
-                     self._wakeup)
-
-        def _wakeup(self, fut):
-            try:
-                res = fut.result()
-            except Exception as e:
-                self._step(None, e)
-            else:
-                self._step(res, None)
-
-    @asyncio.coroutine
-    def foo():
-        yield from asyncio.sleep(3)
-        print("Hello Foo")
-
-    @asyncio.coroutine
-    def bar():
-        yield from asyncio.sleep(1)
-        print("Hello Bar")
-
-    loop = asyncio.get_event_loop()
-    tasks = [Task(foo(), loop=loop),
-             loop.create_task(bar())]
-    loop.run_until_complete(
-            asyncio.wait(tasks))
-    loop.close()
-
-output:
-
-.. code-block:: console
-
-    $ python test.py
-    Hello Bar
-    hello Foo
-
-
-What event loop doing? (Without polling)
-----------------------------------------
-
-.. code-block:: python
-
-    import asyncio
-    from collections import deque
-
-    def done_callback(fut):
-        fut._loop.stop()
-
-    class Loop:
-        """Simple event loop prototype"""
-
-        def __init__(self):
-            self._ready = deque()
-            self._stopping = False
-
-        def create_task(self, coro):
-            Task = asyncio.tasks.Task
-            task = Task(coro, loop=self)
-            return task
-
-        def run_until_complete(self, fut):
-            tasks = asyncio.tasks
-            # get task
-            fut = tasks.ensure_future(
-                        fut, loop=self)
-            # add task to ready queue
-            fut.add_done_callback(done_callback)
-            # run tasks
-            self.run_forever()
-            # remove task from ready queue
-            fut.remove_done_callback(done_callback)
-
-        def run_forever(self):
-            """Run tasks until stop"""
-            try:
-                while True:
-                    self._run_once()
-                    if self._stopping:
-                        break
-            finally:
-                self._stopping = False
-
-        def call_soon(self, cb, *args):
-            """Append task to ready queue"""
-            self._ready.append((cb, args))
-        def call_exception_handler(self, c):
-            pass
-
-        def _run_once(self):
-            """Run task at once"""
-            ntodo = len(self._ready)
-            for i in range(ntodo):
-                t, a = self._ready.popleft()
-                t(*a)
-
-        def stop(self):
-            self._stopping = True
-
-        def close(self):
-            self._ready.clear()
-
-        def get_debug(self):
-            return False
-
-    @asyncio.coroutine
-    def foo():
-        print("Foo")
-
-    @asyncio.coroutine
-    def bar():
-        print("Bar")
-
-    loop = Loop()
-    tasks = [loop.create_task(foo()),
-             loop.create_task(bar())]
-    loop.run_until_complete(
-            asyncio.wait(tasks))
-    loop.close()
-
-output:
-
-.. code-block:: console
-
-    $ python test.py
-    Foo
-    Bar
-
-
-What ``asyncio.wait`` doing?
------------------------------
-
-.. code-block:: python
-
-    import asyncio
-
-    async def wait(fs, loop=None):
-        fs = {asyncio.ensure_future(_) for _ in set(fs)}
-        if loop is None:
-            loop = asyncio.get_event_loop()
-
-        waiter = loop.create_future()
-        counter = len(fs)
-
-        def _on_complete(f):
-            nonlocal counter
-            counter -= 1
-            if counter <= 0 and not waiter.done():
-                 waiter.set_result(None)
-
-        for f in fs:
-            f.add_done_callback(_on_complete)
-
-        # wait all tasks done
-        await waiter
-
-        done, pending = set(), set()
-        for f in fs:
-            f.remove_done_callback(_on_complete)
-            if f.done():
-                done.add(f)
-            else:
-                pending.add(f)
-        return done, pending
-
-    async def slow_task(n):
-        await asyncio.sleep(n)
-        print('sleep "{}" sec'.format(n))
-
-    loop = asyncio.get_event_loop()
-
-    try:
-        print("---> wait")
-        loop.run_until_complete(
-                wait([slow_task(_) for _ in range(1,3)]))
-        print("---> asyncio.wait")
-        loop.run_until_complete(
-                asyncio.wait([slow_task(_) for _ in range(1,3)]))
-    finally:
-        loop.close()
-
-output:
-
-.. code-block:: bash
-
-    ---> wait
-    sleep "1" sec
-    sleep "2" sec
-    ---> asyncio.wait
-    sleep "1" sec
-    sleep "2" sec
-
+    >>> import asyncio
+    >>> from concurrent.futures import ThreadPoolExecutor
+    >>> e = ThreadPoolExecutor()
+    >>> async def read_file(file_):
+    ...     loop = asyncio.get_event_loop()
+    ...     with open(file_) as f:
+    ...         return (await loop.run_in_executor(e, f.read))
+    ...
+    >>> ret = asyncio.run(read_file('/etc/passwd'))
 
 Future like object
 --------------------
@@ -376,7 +130,7 @@ Put blocking task into Executor
     ...     with open(file_) as f:
     ...         data = await loop.run_in_executor(e, f.read)
     ...         return data
-
+    ...
     >>> task = loop.create_task(read_file('/etc/passwd'))
     >>> ret = loop.run_until_complete(task)
 
@@ -589,49 +343,52 @@ Transport and Protocol with SSL
     import asyncio
     import ssl
 
+
     def make_header():
-        head  = b'HTTP/1.1 200 OK\r\n'
-        head += b'Content-Type: text/html\r\n'
-        head += b'\r\n'
+        head = b"HTTP/1.1 200 OK\r\n"
+        head += b"Content-Type: text/html\r\n"
+        head += b"\r\n"
         return head
 
+
     def make_body():
-        resp  = b"<html>"
+        resp = b"<html>"
         resp += b"<h1>Hello SSL</h1>"
         resp += b"</html>"
         return resp
 
+
     sslctx = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-    sslctx.load_cert_chain(certfile='./root-ca.crt',
-                           keyfile='./root-ca.key')
+    sslctx.load_cert_chain(
+        certfile="./root-ca.crt", keyfile="./root-ca.key"
+    )
+
 
     class Service(asyncio.Protocol):
-
         def connection_made(self, tr):
             self.tr = tr
             self.total = 0
 
         def data_received(self, data):
             if data:
-                resp  = make_header()
+                resp = make_header()
                 resp += make_body()
                 self.tr.write(resp)
             self.tr.close()
 
 
     async def start():
-        server = await loop.create_server(Service,
-                                         'localhost',
-                                         4433,
-                                         ssl=sslctx)
+        server = await loop.create_server(
+            Service, "localhost", 4433, ssl=sslctx
+        )
         await server.wait_closed()
+
 
     try:
         loop = asyncio.get_event_loop()
         loop.run_until_complete(start())
     finally:
         loop.close()
-
 
 output:
 
@@ -642,101 +399,6 @@ output:
     $ python3 ssl_web_server.py
 
     # then open browser: https://localhost:4433
-
-
-What ``loop.create_server`` do?
---------------------------------
-
-.. code-block:: python
-
-    import asyncio
-    import socket
-
-    loop = asyncio.get_event_loop()
-
-    async def create_server(loop, protocol_factory, host,
-                            port, *args, **kwargs):
-       sock = socket.socket(socket.AF_INET,
-                            socket.SOCK_STREAM, 0)
-       sock.setsockopt(socket.SOL_SOCKET,
-                       socket.SO_REUSEADDR, 1)
-       sock.setblocking(False)
-       sock.bind((host, port))
-       sock.listen(10)
-       sockets = [sock]
-       server = asyncio.base_events.Server(loop, sockets)
-       loop._start_serving(protocol_factory, sock, None, server)
-
-       return server
-
-
-    class EchoProtocol(asyncio.Protocol):
-        def connection_made(self, transport):
-            peername = transport.get_extra_info('peername')
-            print('Connection from {}'.format(peername))
-            self.transport = transport
-
-        def data_received(self, data):
-            message = data.decode()
-            self.transport.write(data)
-
-    # Equal to: loop.create_server(EchoProtocol,
-    #                              'localhost', 5566)
-    coro = create_server(loop, EchoProtocol, 'localhost', 5566)
-    server = loop.run_until_complete(coro)
-
-    try:
-        loop.run_forever()
-    finally:
-        server.close()
-        loop.run_until_complete(server.wait_closed())
-        loop.close()
-
-output:
-
-.. code-block:: bash
-
-    # console1
-    $ nc localhost 5566
-    Hello
-    Hello
-
-    # console2
-    $ nc localhost 5566
-    asyncio
-    asyncio
-
-Inline callback
----------------
-
-.. code-block:: python
-
-    >>> import asyncio
-    >>> async def foo():
-    ...     await asyncio.sleep(1)
-    ...     return "foo done"
-    ...
-    >>> async def bar():
-    ...     await asyncio.sleep(.5)
-    ...     return "bar done"
-    ...
-    >>> async def ker():
-    ...     await asyncio.sleep(3)
-    ...     return "ker done"
-    ...
-    >>> async def task():
-    ...     res = await foo()
-    ...     print(res)
-    ...     res = await bar()
-    ...     print(res)
-    ...     res = await ker()
-    ...     print(res)
-    ...
-    >>> loop = asyncio.get_event_loop()
-    >>> loop.run_until_complete(task())
-    foo done
-    bar done
-    ker done
 
 Asynchronous Iterator
 ---------------------
@@ -894,116 +556,6 @@ decorator ``@asynccontextmanager``
     Hello
     done
 
-
-What `loop.sock_*` do?
------------------------
-
-.. code-block:: python
-
-    import asyncio
-    import socket
-
-    def sock_accept(self, sock, fut=None, registed=False):
-        fd = sock.fileno()
-        if fut is None:
-            fut = self.create_future()
-        if registed:
-            self.remove_reader(fd)
-        try:
-            conn, addr = sock.accept()
-            conn.setblocking(False)
-        except (BlockingIOError, InterruptedError):
-            self.add_reader(fd, self.sock_accept, sock, fut, True)
-        except Exception as e:
-            fut.set_exception(e)
-        else:
-            fut.set_result((conn, addr))
-        return fut
-
-    def sock_recv(self, sock, n , fut=None, registed=False):
-        fd = sock.fileno()
-        if fut is None:
-            fut = self.create_future()
-        if registed:
-            self.remove_reader(fd)
-        try:
-            data = sock.recv(n)
-        except (BlockingIOError, InterruptedError):
-            self.add_reader(fd, self.sock_recv, sock, n ,fut, True)
-        except Exception as e:
-            fut.set_exception(e)
-        else:
-            fut.set_result(data)
-        return fut
-
-    def sock_sendall(self, sock, data, fut=None, registed=False):
-        fd = sock.fileno()
-        if fut is None:
-            fut = self.create_future()
-        if registed:
-            self.remove_writer(fd)
-        try:
-            n = sock.send(data)
-        except (BlockingIOError, InterruptedError):
-            n = 0
-        except Exception as e:
-            fut.set_exception(e)
-            return
-        if n == len(data):
-            fut.set_result(None)
-        else:
-            if n:
-                data = data[n:]
-            self.add_writer(fd, sock, data, fut, True)
-        return fut
-
-    async def handler(loop, conn):
-        while True:
-            msg = await loop.sock_recv(conn, 1024)
-            if msg: await loop.sock_sendall(conn, msg)
-            else: break
-        conn.close()
-
-    async def server(loop):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.setblocking(False)
-        sock.bind(('localhost', 9527))
-        sock.listen(10)
-
-        while True:
-            conn, addr = await loop.sock_accept(sock)
-            loop.create_task(handler(loop, conn))
-
-    EventLoop = asyncio.SelectorEventLoop
-    EventLoop.sock_accept = sock_accept
-    EventLoop.sock_recv = sock_recv
-    EventLoop.sock_sendall = sock_sendall
-    loop = EventLoop()
-
-    try:
-        loop.run_until_complete(server(loop))
-    except KeyboardInterrupt:
-        pass
-    finally:
-        loop.close()
-
-output:
-
-.. code-block:: bash
-
-    # console 1
-    $ python3 async_sock.py &
-    $ nc localhost 9527
-    Hello
-    Hello
-
-    # console 2
-    $ nc localhost 9527
-    asyncio
-    asyncio
-
-
 Simple asyncio connection pool
 -------------------------------
 
@@ -1145,6 +697,86 @@ output:
     echo: b'coro_3'
     echo: b'coro_4'
 
+Get domain name
+----------------
+
+.. code-block:: python
+
+    >>> import asyncio
+    >>> async def getaddrinfo(host, port):
+    ...     loop = asyncio.get_event_loop()
+    ...     return (await loop.getaddrinfo(host, port))
+    ...
+    >>> addrs = asyncio.run(getaddrinfo('github.com', 443))
+    >>> for a in addrs:
+    ...     family, typ, proto, name, sockaddr = a
+    ...     print(sockaddr)
+    ...
+    ('192.30.253.113', 443)
+    ('192.30.253.113', 443)
+    ('192.30.253.112', 443)
+    ('192.30.253.112', 443)
+
+Gather Results
+--------------
+
+.. code-block:: python
+
+    import asyncio
+    import ssl
+
+
+    path = ssl.get_default_verify_paths()
+    sslctx = ssl.SSLContext()
+    sslctx.verify_mode = ssl.CERT_REQUIRED
+    sslctx.check_hostname = True
+    sslctx.load_verify_locations(path.cafile)
+
+
+    async def fetch(host, port):
+        r, w = await asyncio.open_connection(host, port, ssl=sslctx)
+        req = "GET / HTTP/1.1\r\n"
+        req += f"Host: {host}\r\n"
+        req += "Connection: close\r\n"
+        req += "\r\n"
+
+        # send request
+        w.write(req.encode())
+
+        # recv response
+        resp = ""
+        while True:
+            line = await r.readline()
+            if not line:
+                break
+            line = line.decode("utf-8")
+            resp += line
+
+        # close writer
+        w.close()
+        await w.wait_closed()
+        return resp
+
+
+    async def main():
+        loop = asyncio.get_running_loop()
+        url = ["python.org", "github.com", "google.com"]
+        fut = [fetch(u, 443) for u in url]
+        resps = await asyncio.gather(*fut)
+        for r in resps:
+            print(r.split("\r\n")[0])
+
+
+    asyncio.run(main())
+
+output:
+
+.. code-block:: bash
+
+    $ python fetch.py
+    HTTP/1.1 301 Moved Permanently
+    HTTP/1.1 200 OK
+    HTTP/1.1 301 Moved Permanently
 
 Simple asyncio UDP echo server
 --------------------------------
@@ -1217,7 +849,7 @@ output:
     Hello UDP
 
 
-Simple asyncio web server
+Simple asyncio Web server
 -------------------------
 
 .. code-block:: python
@@ -1270,8 +902,42 @@ Simple asyncio web server
     # Then open browser with url: localhost:9527
 
 
-Simple HTTPS asyncio web server
---------------------------------
+Simple HTTPS Web Server
+------------------------
+
+.. code-block:: python
+
+    import asyncio
+    import ssl
+
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.load_cert_chain('crt.pem', 'key.pem')
+
+    async def conn(reader, writer):
+        _ = await reader.read(1024)
+        head = b"HTTP/1.1 200 OK\r\n"
+        head += b"Content-Type: text/html\r\n"
+        head += b"\r\n"
+
+        body = b"<!doctype html>"
+        body += b"<html>"
+        body += b"<body><h1>Awesome Python</h1></body>"
+        body += b"</html>"
+
+        writer.write(head + body)
+        writer.close()
+
+
+    async def main(host, port):
+        srv = await asyncio.start_server(conn, host, port, ssl=ctx)
+        async with srv:
+            await srv.serve_forever()
+
+    asyncio.run(main('0.0.0.0', 8000))
+
+
+Simple HTTPS Web server (low-level api)
+----------------------------------------
 
 .. code-block:: python
 
@@ -1392,6 +1058,111 @@ output:
     $ curl https://localhost:4433 -v          \
     >      --resolve localhost:4433:127.0.0.1 \
     >      --cacert ~/test/root-ca.crt
+
+
+TLS Upgrade
+------------
+
+**New in Python 3.7**
+
+.. code-block:: python
+
+    import asyncio
+    import ssl
+
+
+    class HttpClient(asyncio.Protocol):
+        def __init__(self, on_con_lost):
+            self.on_con_lost = on_con_lost
+            self.resp = b""
+
+        def data_received(self, data):
+            self.resp += data
+
+        def connection_lost(self, exc):
+            resp = self.resp.decode()
+            print(resp.split("\r\n")[0])
+            self.on_con_lost.set_result(True)
+
+
+    async def main():
+        paths = ssl.get_default_verify_paths()
+        sslctx = ssl.SSLContext()
+        sslctx.verify_mode = ssl.CERT_REQUIRED
+        sslctx.check_hostname = True
+        sslctx.load_verify_locations(paths.cafile)
+
+        loop = asyncio.get_running_loop()
+        on_con_lost = loop.create_future()
+
+        tr, proto = await loop.create_connection(
+            lambda: HttpClient(on_con_lost), "github.com", 443
+        )
+        new_tr = await loop.start_tls(tr, proto, sslctx)
+        req = f"GET / HTTP/1.1\r\n"
+        req += "Host: github.com\r\n"
+        req += "Connection: close\r\n"
+        req += "\r\n"
+        new_tr.write(req.encode())
+
+        await on_con_lost
+        new_tr.close()
+
+
+    asyncio.run(main())
+
+output:
+
+.. code-block:: bash
+
+    $ python3 --version
+    Python 3.7.0
+    $ python3 https.py
+    HTTP/1.1 200 OK
+
+Using sendfile
+---------------
+
+**New in Python 3.7**
+
+.. code-block:: python
+
+    import asyncio
+
+    path = "index.html"
+
+    async def conn(reader, writer):
+
+        loop = asyncio.get_event_loop()
+        _ = await reader.read(1024)
+
+        with open(path, "rb") as f:
+            tr = writer.transport
+            head = b"HTTP/1.1 200 OK\r\n"
+            head += b"Content-Type: text/html\r\n"
+            head += b"\r\n"
+
+            tr.write(head)
+            await loop.sendfile(tr, f)
+            writer.close()
+
+    async def main(host, port):
+        # run a simplle http server
+        srv = await asyncio.start_server(conn, host, port)
+        async with srv:
+            await srv.serve_forever()
+
+    asyncio.run(main("0.0.0.0", 8000))
+
+output:
+
+.. code-block:: bash
+
+    $ echo '<!doctype html><h1>Awesome Python</h1>' > index.html
+    $ python http.py &
+    [2] 60506
+    $ curl http://localhost:8000
+    <!doctype html><h1>Awesome Python</h1>
 
 
 Simple asyncio WSGI web server
